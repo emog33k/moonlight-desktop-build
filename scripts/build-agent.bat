@@ -1,6 +1,6 @@
 @echo off
-rem Builds LocalRDP Agent (release) with everything it needs to run:
-rem   L:\moonlight-qt\build\agent-deploy\LocalRdpAgent.exe + Qt + OpenSSL DLLs
+rem Builds Moonlight Desktop Agent (release) with everything it needs to run:
+rem   L:\moonlight-qt\build\agent-deploy\MoonlightDesktopAgent.exe + Qt + OpenSSL DLLs
 setlocal
 call "%~dp0env.bat" || exit /b 1
 for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set "VSDIR=%%i"
@@ -22,8 +22,8 @@ popd
 
 if exist "%DEPLOY%" rmdir /s /q "%DEPLOY%"
 mkdir "%DEPLOY%"
-copy /y "%OUT%\release\LocalRdpAgent.exe" "%DEPLOY%\" >nul || exit /b 1
-windeployqt --release --no-translations --no-system-d3d-compiler --no-opengl-sw --no-compiler-runtime --force-openssl "%DEPLOY%\LocalRdpAgent.exe" >nul || exit /b 1
+copy /y "%OUT%\release\MoonlightDesktopAgent.exe" "%DEPLOY%\" >nul || exit /b 1
+windeployqt --release --no-translations --no-system-d3d-compiler --no-opengl-sw --no-compiler-runtime --force-openssl "%DEPLOY%\MoonlightDesktopAgent.exe" >nul || exit /b 1
 rem OpenSSL for Qt's TLS backend, and the VC runtime
 copy /y L:\moonlight-qt\libs\windows\lib\x64\libssl-3-x64.dll "%DEPLOY%\" >nul || exit /b 1
 copy /y L:\moonlight-qt\libs\windows\lib\x64\libcrypto-3-x64.dll "%DEPLOY%\" >nul || exit /b 1

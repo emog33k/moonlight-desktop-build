@@ -1,6 +1,6 @@
 <#
 New keys for Sunshine on this PC: Sunshine makes a new certificate and key, every
-paired device is forgotten, and LocalRDP Agent gets a new certificate signed with
+paired device is forgotten, and Moonlight Desktop Agent gets a new certificate signed with
 the new key.
 
 What it does (asks for administrator rights once):
@@ -30,9 +30,9 @@ $CredDir    = Join-Path $ConfigDir 'credentials'
 $Cert       = Join-Path $CredDir 'cacert.pem'
 $Key        = Join-Path $CredDir 'cakey.pem'
 $StateFile  = Join-Path $ConfigDir 'sunshine_state.json'
-$AgentDir   = Join-Path $env:ProgramFiles 'LocalRDP Agent'
-$AgentExe   = Join-Path $AgentDir 'LocalRdpAgent.exe'
-$AgentData  = Join-Path $env:ProgramData 'LocalRDP Agent'
+$AgentDir   = Join-Path $env:ProgramFiles 'Moonlight Desktop Agent'
+$AgentExe   = Join-Path $AgentDir 'MoonlightDesktopAgent.exe'
+$AgentData  = Join-Path $env:ProgramData 'Moonlight Desktop Agent'
 $PowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $Suffix     = '.before-rotation'
 
@@ -40,7 +40,7 @@ function Step($text) { Write-Host "  - $text" }
 
 function Stop-OurAgent {
     $session = (Get-Process -Id $PID).SessionId
-    foreach ($a in @(Get-Process LocalRdpAgent -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $session })) {
+    foreach ($a in @(Get-Process MoonlightDesktopAgent -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $session })) {
         Stop-Process -Id $a.Id -Force -ErrorAction SilentlyContinue
         Wait-Process -Id $a.Id -Timeout 10 -ErrorAction SilentlyContinue
     }
@@ -58,7 +58,7 @@ if (-not $Elevated) {
     Write-Host "New Sunshine keys$(if ($DryRun) {' (dry run: nothing is changed)'})"
     if ($DryRun) {
         & $PowerShell -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath -Elevated -UserSid $me.User.Value -DryRun
-        Step "restart LocalRDP Agent"
+        Step "restart Moonlight Desktop Agent"
         exit $LASTEXITCODE
     }
     $elevLog = Join-Path $env:TEMP ("localrdp-rotate-" + [guid]::NewGuid().ToString('N') + ".log")
@@ -73,7 +73,7 @@ if (-not $Elevated) {
         # The elevated part stops the agent to replace its certificate: whatever
         # happened, start it again (with the new certificate if it was made)
         if (Test-Path $AgentExe) {
-            Step "restart LocalRDP Agent (it loads its new certificate)"
+            Step "restart Moonlight Desktop Agent (it loads its new certificate)"
             Stop-OurAgent
             Start-Process -FilePath $AgentExe -WorkingDirectory $AgentDir
         }
@@ -164,7 +164,7 @@ Step "delete the old key"
 Remove-Item -LiteralPath ($Key + $Suffix), ($Cert + $Suffix), ($StateFile + $Suffix) -Force
 
 if (Test-Path $AgentExe) {
-    Step "give LocalRDP Agent a new certificate (signed with the new key)"
+    Step "give Moonlight Desktop Agent a new certificate (signed with the new key)"
     # A running agent keeps its files open, so they could not be replaced
     Stop-OurAgent
     $out = Join-Path $AgentData 'issue.txt'

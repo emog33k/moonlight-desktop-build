@@ -1,12 +1,12 @@
 <#
-Installs (or updates) LocalRDP Agent on this PC.
+Installs (or updates) Moonlight Desktop Agent on this PC.
 
 What it does:
-  1. Copies the agent to "C:\Program Files\LocalRDP Agent" (stopping a running
+  1. Copies the agent to "C:\Program Files\Moonlight Desktop Agent" (stopping a running
      agent of this user first).
   2. Gives the agent its own certificate, signed with Sunshine's key (Moonlight
      trusts what Sunshine signs), and a key of its own, encrypted with DPAPI for
-     the current Windows user, in "%ProgramData%\LocalRDP Agent" (readable only by
+     the current Windows user, in "%ProgramData%\Moonlight Desktop Agent" (readable only by
      that user and SYSTEM). Sunshine's own key stays where it is.
   3. Allows TCP 48100 in the firewall from the local subnet only (any network
      profile: Windows often marks a home network as Public), for the agent only.
@@ -24,15 +24,19 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
-$InstallDir  = Join-Path $env:ProgramFiles 'LocalRDP Agent'
-$DataDir     = Join-Path $env:ProgramData 'LocalRDP Agent'
-$Exe         = Join-Path $InstallDir 'LocalRdpAgent.exe'
+$InstallDir  = Join-Path $env:ProgramFiles 'Moonlight Desktop Agent'
+$DataDir     = Join-Path $env:ProgramData 'Moonlight Desktop Agent'
+$Exe         = Join-Path $InstallDir 'MoonlightDesktopAgent.exe'
 $SunshineCfg = Join-Path $env:ProgramFiles 'Sunshine\config'
-$RuleName    = 'LocalRDP Agent (TCP 48100, local subnet)'
+$RuleName    = 'Moonlight Desktop Agent (TCP 48100, local subnet)'
 $RunKey      = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
-$RunValue    = 'LocalRDP Agent'
+$RunValue    = 'Moonlight Desktop Agent'
 # Never a "powershell" found through PATH
 $PowerShell  = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+# The agent's earlier name: an update from it removes what it left
+$OldName     = 'LocalRDP Agent'
+$OldProcess  = 'LocalRdpAgent'
+$OldRuleName = 'LocalRDP Agent (TCP 48100, local subnet)'
 
 function Step($text) { Write-Host "  - $text" }
 function Do-Or-Show([string]$text, [scriptblock]$action) {
@@ -40,14 +44,27 @@ function Do-Or-Show([string]$text, [scriptblock]$action) {
     if (-not $DryRun) { & $action }
 }
 
-# Agents of this Windows session only (another user's agent is none of our business)
+# Agents of this Windows session only (another user's agent is none of our business),
+# also one with the earlier name (it holds the same one-agent lock)
 function Stop-OurAgent {
     $session = (Get-Process -Id $PID).SessionId
-    $agents = @(Get-Process LocalRdpAgent -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $session })
+    $agents = @(Get-Process MoonlightDesktopAgent, $OldProcess -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $session })
     foreach ($a in $agents) {
         Stop-Process -Id $a.Id -Force -ErrorAction SilentlyContinue
         Wait-Process -Id $a.Id -Timeout 10 -ErrorAction SilentlyContinue
     }
+}
+
+# Deletes a folder, but never through a link or junction (as administrator that
+# could delete whatever it points to)
+function Remove-PlainFolder([string]$path) {
+    if (-not (Test-Path -LiteralPath $path)) { return }
+    $item = Get-Item -LiteralPath $path -Force
+    if (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        Write-Warning "$path is not a normal folder (a link?); left as it is."
+        return
+    }
+    Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 # True once our agent (this exe) listens on TCP 48100, waiting up to 10 s
@@ -67,14 +84,14 @@ $isAdmin = (New-Object Security.Principal.WindowsPrincipal $me).IsInRole([Securi
 if (-not $Elevated) {
     # ---- Normal (non-elevated) part ----
     $Source = (Resolve-Path $Source).Path
-    if (-not (Test-Path (Join-Path $Source 'LocalRdpAgent.exe'))) {
+    if (-not (Test-Path (Join-Path $Source 'MoonlightDesktopAgent.exe'))) {
         throw "Agent build not found in $Source. Run scripts\build-agent.bat first."
     }
     if (-not (Test-Path (Join-Path $SunshineCfg 'credentials\cacert.pem'))) {
         throw "Sunshine is not installed in the standard folder ($SunshineCfg)."
     }
 
-    Write-Host "LocalRDP Agent install$(if ($DryRun) {' (dry run: nothing is changed)'})"
+    Write-Host "Moonlight Desktop Agent install$(if ($DryRun) {' (dry run: nothing is changed)'})"
     if ($DryRun) {
         # Same process tree, no UAC, no log file
         & $PowerShell -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath -Elevated `
@@ -97,6 +114,10 @@ if (-not $Elevated) {
 
         Step "start the agent at sign-in (HKCU Run)"
         Set-ItemProperty -Path $RunKey -Name $RunValue -Value "`"$Exe`""
+        # The earlier name's autostart, uninstall entry and log
+        Remove-ItemProperty -Path $RunKey -Name $OldName -ErrorAction SilentlyContinue
+        Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\$OldName" -Recurse -ErrorAction SilentlyContinue
+        Remove-PlainFolder (Join-Path $env:LOCALAPPDATA $OldName)
         $ok = $true
     }
     finally {
@@ -104,7 +125,7 @@ if (-not $Elevated) {
         # PC without a running agent if one is installed
         if (Test-Path $Exe) {
             $session = (Get-Process -Id $PID).SessionId
-            $running = @(Get-Process LocalRdpAgent -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $session })
+            $running = @(Get-Process MoonlightDesktopAgent -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $session })
             if ($running.Count -eq 0) {
                 Step "start the agent now"
                 Start-Process -FilePath $Exe -WorkingDirectory $InstallDir
@@ -112,9 +133,9 @@ if (-not $Elevated) {
         }
     }
 
-    $log = Join-Path $env:LOCALAPPDATA 'LocalRDP Agent\agent.log'
+    $log = Join-Path $env:LOCALAPPDATA 'Moonlight Desktop Agent\agent.log'
     if ($ok -and (Wait-AgentListening)) {
-        Write-Host "LocalRDP Agent is running and listening on TCP 48100." -ForegroundColor Green
+        Write-Host "Moonlight Desktop Agent is running and listening on TCP 48100." -ForegroundColor Green
         exit 0
     }
     Write-Warning "The agent is not listening. Last log lines:"
@@ -175,6 +196,12 @@ Do-Or-Show "allow TCP 48100 for the agent from the local subnet" {
     Get-NetFirewallRule -DisplayName $RuleName -ErrorAction SilentlyContinue | Remove-NetFirewallRule
     New-NetFirewallRule -DisplayName $RuleName -Direction Inbound -Action Allow -Protocol TCP -LocalPort 48100 `
         -Profile Any -RemoteAddress LocalSubnet -Program $Exe | Out-Null
+}
+
+Do-Or-Show "remove what the agent left under its earlier name ($OldName)" {
+    Get-NetFirewallRule -DisplayName $OldRuleName -ErrorAction SilentlyContinue | Remove-NetFirewallRule
+    Remove-PlainFolder (Join-Path $env:ProgramFiles $OldName)
+    Remove-PlainFolder (Join-Path $env:ProgramData $OldName)
 }
 if ($LogFile) { Stop-Transcript | Out-Null }
 exit 0

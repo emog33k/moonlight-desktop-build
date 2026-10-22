@@ -1,6 +1,6 @@
 @echo off
-rem Full release build of the LocalRDP Moonlight fork and the laptop package.
-rem Result: <project>\dist\MoonlightLocalRDP-<yyyymmdd>.zip (portable: unzip anywhere and run
+rem Full release build of Moonlight Desktop and the portable client package.
+rem Result: <project>\dist\MoonlightDesktop-Portable-<yyyymmdd>.zip (unzip anywhere and run
 rem Moonlight.exe; settings stay next to the exe, the regular Moonlight is not touched).
 setlocal
 call "%~dp0env.bat" || exit /b 1
@@ -21,6 +21,6 @@ if not exist "%SRC%" (echo Missing %SRC% & exit /b 1)
 "C:\Program Files\7-Zip\7z.exe" l "%SRC%" | findstr /c:"portable.dat" >nul || (echo portable.dat missing from package & exit /b 1)
 
 if not exist L:\dist mkdir L:\dist
-copy /y "%SRC%" "L:\dist\MoonlightLocalRDP-%STAMP%.zip" >nul || exit /b 1
-echo Package: %LOCALRDP_ROOT%\dist\MoonlightLocalRDP-%STAMP%.zip
+copy /y "%SRC%" "L:\dist\MoonlightDesktop-Portable-%STAMP%.zip" >nul || exit /b 1
+echo Package: %LOCALRDP_ROOT%\dist\MoonlightDesktop-Portable-%STAMP%.zip
 exit /b 0
