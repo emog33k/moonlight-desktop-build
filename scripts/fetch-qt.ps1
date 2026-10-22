@@ -20,9 +20,28 @@ New-Item -ItemType Directory -Force $dl, $dest | Out-Null
 $v = $Version -replace '\.', ''
 $base = "https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt6_$v/qt6_${v}_msvc2022_64/"
 
+# The checksum published next to a file: .sha256 if the repository has it, else .sha1
+# (Qt switched layouts; read raw bytes as ASCII, the server labels them oddly)
+function Get-PublishedHash([string]$url) {
+    foreach ($algo in @('SHA256', 'SHA1')) {
+        try {
+            $raw = (Invoke-WebRequest "$url.$($algo.ToLower())" -UseBasicParsing).RawContentStream.ToArray()
+            return @{ Algorithm = $algo; Hash = ([Text.Encoding]::ASCII.GetString($raw) -split '\s+')[0].ToUpper() }
+        }
+        catch {
+            if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 404) { continue }
+            throw
+        }
+    }
+    return $null
+}
+
+# Updates.xml comes straight from download.qt.io over HTTPS; checked too when a checksum is published
 Invoke-WebRequest "${base}Updates.xml" -OutFile "$dl\Updates.xml" -UseBasicParsing
-$expected = ((Invoke-WebRequest "${base}Updates.xml.sha256" -UseBasicParsing).Content -split '\s+')[0]
-if ((Get-FileHash "$dl\Updates.xml" -Algorithm SHA256).Hash -ne $expected.ToUpper()) { throw 'Updates.xml checksum mismatch' }
+$expected = Get-PublishedHash "${base}Updates.xml"
+if ($expected -and (Get-FileHash "$dl\Updates.xml" -Algorithm $expected.Algorithm).Hash -ne $expected.Hash) {
+    throw 'Updates.xml checksum mismatch'
+}
 
 [xml]$x = Get-Content "$dl\Updates.xml" -Raw
 $pkg = $x.Updates.PackageUpdate | Where-Object { $_.Name -eq "qt.qt6.$v.win64_msvc2022_64" }
@@ -37,10 +56,10 @@ foreach ($f in $files) {
     $out = Join-Path $dl $f
     Write-Host "downloading $f"
     Invoke-WebRequest $url -OutFile $out -UseBasicParsing
-    # The server labels .sha256 files with the archive's content type, so read raw bytes as ASCII.
-    $raw = (Invoke-WebRequest "$url.sha256" -UseBasicParsing).RawContentStream.ToArray()
-    $sha256 = ([Text.Encoding]::ASCII.GetString($raw) -split '\s+')[0]
-    if ((Get-FileHash $out -Algorithm SHA256).Hash -ne $sha256.ToUpper()) { throw "checksum mismatch: $f" }
+    # Every archive must have a published checksum and match it
+    $expected = Get-PublishedHash $url
+    if (-not $expected) { throw "no checksum published for $f" }
+    if ((Get-FileHash $out -Algorithm $expected.Algorithm).Hash -ne $expected.Hash) { throw "checksum mismatch: $f" }
     $only = $PartialExtract.Keys | Where-Object { $f -like "$_-*" } | ForEach-Object { $PartialExtract[$_] }
     & $sevenZip x $out "-o$dest" -y @($only) | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "extract failed: $f" }
