@@ -17,8 +17,7 @@ if not exist L:\scripts\env.bat (
 )
 
 set "PATH=L:\tools\Qt\6.11.3\msvc2022_64\bin;C:\Program Files\7-Zip;%PATH%"
-if exist "E:\tg-local-api\telegram-bot-api\vcpkg\downloads\tools\jom\jom-1_1_4\jom.exe" (
-    set "PATH=%PATH%;E:\tg-local-api\telegram-bot-api\vcpkg\downloads\tools\jom\jom-1_1_4"
-)
+rem Optional: parallel builds with jom (set JOM_DIR to the folder with jom.exe)
+if defined JOM_DIR if exist "%JOM_DIR%\jom.exe" set "PATH=%PATH%;%JOM_DIR%"
 set VSLANG=1033
 exit /b 0
