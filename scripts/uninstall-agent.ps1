@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 
 $InstallDir = Join-Path $env:ProgramFiles 'Moonlight Desktop Agent'
 $DataDir    = Join-Path $env:ProgramData 'Moonlight Desktop Agent'
-$RuleName   = 'Moonlight Desktop Agent (TCP 48100, local subnet)'
+$RuleName   = 'Moonlight Desktop Agent (TCP 48100, local network)'
 $RunKey     = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 $PowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 # The agent's earlier name (an install that was never updated)
@@ -59,7 +59,7 @@ if (-not $Elevated) {
 }
 
 Do-Or-Show "remove the firewall rule" {
-    foreach ($rule in @($RuleName, "$OldName (TCP 48100, local subnet)")) {
+    foreach ($rule in @($RuleName, 'Moonlight Desktop Agent (TCP 48100, local subnet)', "$OldName (TCP 48100, local subnet)")) {
         Get-NetFirewallRule -DisplayName $rule -ErrorAction SilentlyContinue | Remove-NetFirewallRule
     }
 }

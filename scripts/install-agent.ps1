@@ -8,8 +8,8 @@ What it does:
      trusts what Sunshine signs), and a key of its own, encrypted with DPAPI for
      the current Windows user, in "%ProgramData%\Moonlight Desktop Agent" (readable only by
      that user and SYSTEM). Sunshine's own key stays where it is.
-  3. Allows TCP 48100 in the firewall from the local subnet only (any network
-     profile: Windows often marks a home network as Public), for the agent only.
+  3. Allows TCP 48100 in the firewall from the local subnet and Tailscale only (any
+     network profile: Windows often marks a home network as Public), for the agent only.
   4. Starts the agent at sign-in (HKCU Run) and starts it now (not elevated).
 
 Run normally; it asks for administrator rights (UAC) for steps 1-3.
@@ -28,7 +28,12 @@ $InstallDir  = Join-Path $env:ProgramFiles 'Moonlight Desktop Agent'
 $DataDir     = Join-Path $env:ProgramData 'Moonlight Desktop Agent'
 $Exe         = Join-Path $InstallDir 'MoonlightDesktopAgent.exe'
 $SunshineCfg = Join-Path $env:ProgramFiles 'Sunshine\config'
-$RuleName    = 'Moonlight Desktop Agent (TCP 48100, local subnet)'
+$RuleName    = 'Moonlight Desktop Agent (TCP 48100, local network)'
+# Who may reach the agent: the local subnet, and Tailscale (Sunshine counts these
+# as its LAN too). The agent still accepts only clients paired in Sunshine.
+$RemoteAddresses = @('LocalSubnet', '100.64.0.0/10', 'fd7a:115c:a1e0::/48')
+# Earlier names of this rule (removed on update)
+$OlderRuleNames  = @('Moonlight Desktop Agent (TCP 48100, local subnet)')
 $RunKey      = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 $RunValue    = 'Moonlight Desktop Agent'
 # Never a "powershell" found through PATH
@@ -192,10 +197,12 @@ Do-Or-Show "make the agent's own certificate (signed with Sunshine's key) in $Da
     if ($p.ExitCode -ne 0) { throw "Could not make the agent certificate (exit $($p.ExitCode))." }
 }
 
-Do-Or-Show "allow TCP 48100 for the agent from the local subnet" {
-    Get-NetFirewallRule -DisplayName $RuleName -ErrorAction SilentlyContinue | Remove-NetFirewallRule
+Do-Or-Show "allow TCP 48100 for the agent from the local network and Tailscale" {
+    foreach ($name in @($RuleName) + $OlderRuleNames) {
+        Get-NetFirewallRule -DisplayName $name -ErrorAction SilentlyContinue | Remove-NetFirewallRule
+    }
     New-NetFirewallRule -DisplayName $RuleName -Direction Inbound -Action Allow -Protocol TCP -LocalPort 48100 `
-        -Profile Any -RemoteAddress LocalSubnet -Program $Exe | Out-Null
+        -Profile Any -RemoteAddress $RemoteAddresses -Program $Exe | Out-Null
 }
 
 Do-Or-Show "remove what the agent left under its earlier name ($OldName)" {
